@@ -1,0 +1,601 @@
+name: Copy ECBC website
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: copy-ecbc
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Copy independent ECBC source
+        env:
+          ECBC_OWNER_CODE: ${{ secrets.ECBC_OWNER_CODE }}
+        shell: python
+        run: |
+          import base64, http.cookiejar, json, os, pathlib, urllib.request, urllib.error
+
+          root = pathlib.Path.cwd()
+
+          if (root / "package.json").exists():
+              raise SystemExit("Use a new repository: package.json already exists.")
+
+          origin = "https://ecbc-court-club.seunghyeonbang78.chatgpt.site"
+          code = os.environ.get("ECBC_OWNER_CODE", "").strip()
+
+          if not code:
+              raise SystemExit("Add the ECBC_OWNER_CODE repository secret first.")
+
+          class NoRedirect(urllib.request.HTTPRedirectHandler):
+              def redirect_request(self, *args, **kwargs):
+                  return None
+
+          client = urllib.request.build_opener(
+              NoRedirect(),
+              urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
+          )
+
+          def request(path, data=None):
+              headers = {"Origin": origin, "Accept": "application/json"}
+              if data is not None:
+                  headers["Content-Type"] = "application/json"
+                  data = json.dumps(data).encode()
+              return client.open(
+                  urllib.request.Request(origin + path, data=data, headers=headers),
+                  timeout=90
+              )
+
+          try:
+              with request("/api/owner/login", {"code": code}) as response:
+                  json.load(response)
+              try:
+                  with request("/api/source") as response:
+                      exported = json.load(response)
+              finally:
+                  try:
+                      request("/api/owner/logout", {}).close()
+                  except urllib.error.HTTPError as e:
+                      if e.code != 303:
+                          raise
+          except urllib.error.HTTPError as e:
+              raise SystemExit(
+                  f"Source access failed (HTTP {e.code}). Check your owner code and source site."
+              ) from None
+
+          source = {f["path"]: f for f in exported["files"]}
+
+          def write(path, text):
+              destination = root / path
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_text(text, encoding="utf-8")
+
+          copy_paths = [
+              'app/admin/login.tsx',
+              'app/admin/page.tsx',
+              'app/admin/workspace.tsx',
+              'app/api/club/route.ts',
+              'app/api/owner/login/route.ts',
+              'app/api/owner/logout/route.ts',
+              'app/calendar/page.tsx',
+              'app/coach/page.tsx',
+              'app/globals.css',
+              'app/history/page.tsx',
+              'app/home-content.ts',
+              'app/layout.tsx',
+              'app/news-indicator.tsx',
+              'app/news-preview.tsx',
+              'app/news/page.tsx',
+              'app/page.tsx',
+              'app/shell.tsx',
+              'app/training/page.tsx',
+              'app/use-club.ts',
+              'cloudflare-env.d.ts',
+              'components/ui/alert-dialog.tsx',
+              'components/ui/button.tsx',
+              'components/ui/checkbox.tsx',
+              'components/ui/dialog.tsx',
+              'components/ui/select.tsx',
+              'components/ui/table.tsx',
+              'components/ui/tabs.tsx',
+              'lib/club-db.ts',
+              'lib/club-types.ts',
+              'lib/club-validation.ts',
+              'lib/import-calendar.ts',
+              'lib/import-news.ts',
+              'lib/original-news.ts',
+              'lib/owner.ts',
+              'lib/utils.ts',
+              'next.config.ts',
+              'package.json',
+              'pnpm-lock.yaml',
+              'postcss.config.mjs',
+              'public/assets/coach.jpg',
+              'public/assets/court.jpg',
+              'public/assets/ecbc-history.pdf',
+              'public/favicon.svg',
+              'public/file.svg',
+              'public/globe.svg',
+              'public/window.svg',
+              'tsconfig.json',
+              'vendor/shadcn-tailwind-4.13.0.LICENSE.md',
+              'vendor/shadcn-tailwind-4.13.0.css'
+          ]
+
+          for path in copy_paths:
+              f = source[path]
+              payload = (
+                  base64.b64decode(f["content"], validate=True)
+                  if f["encoding"] == "base64"
+                  else f["content"].encode("utf-8")
+              )
+              destination = root / path
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_bytes(payload)
+
+          # Do not copy old deployment identity, credentials, or private drafts.
+          p = root / "app/admin/workspace.tsx"
+          s = p.read_text()
+
+          def replace(before, after):
+              global s
+              if before not in s:
+                  raise SystemExit(
+                      "Source format changed; calendar patch stopped: " + before[:55]
+                  )
+              s = s.replace(before, after)
+
+          replace(
+              "import{useState}from'react';",
+              "import{useState}from'react';import OwnerCalendar from './owner-calendar';import{Dialog,DialogContent,DialogTitle,DialogDescription}from'@/components/ui/dialog';"
+          )
+          replace(
+              "const newEvent=()=>({title:'',date:today()",
+              "const newEvent=(date=today())=>({title:'',date"
+          )
+          replace(
+              "const[kind,setKind]=useState('events');",
+              "const[kind,setKind]=useState('events');const[month,setMonth]=useState(()=>today().slice(0,7));"
+          )
+          replace(
+              'function guard(action:()=>void){if(dirty)',
+              'function guard(action:()=>void){if(saving)return;if(dirty)'
+          )
+          replace(
+              'function open(row:any=null,k=kind)',
+              'function open(row:any=null,k=kind,date=today())'
+          )
+          replace(
+              "k==='events'?newEvent():newPost()",
+              "k==='events'?newEvent(date):newPost()"
+          )
+          replace(
+              'setDirty(false);setForm(null);setEdit(null);setDeleting(null);await load()',
+              "if(kind==='events'&&op!=='delete')setMonth(form.date.slice(0,7));setDirty(false);setForm(null);setEdit(null);setDeleting(null);await load()"
+          )
+          replace(
+              '<h1>Your club, up to date.</h1><p>Welcome, {name}. Changes are saved online and shared across devices.</p>',
+              '<h1>Your club calendar.</h1><p>Welcome, {name}. Choose a day to keep your club up to date.</p>'
+          )
+          replace(
+              "'Add a session, update a location, or mark a cancellation. All times are Eastern.'",
+              "'Your schedule at a glance. Add sessions and update events directly on the calendar.'"
+          )
+          replace(
+              'onClick={()=>open(null,k)}',
+              "onClick={()=>open(null,k,month===today().slice(0,7)?today():month+'-01')}"
+          )
+          replace(
+              '{form&&<section className="editor-panel">',
+              '{kind===\'events\'&&!loading&&!error&&<OwnerCalendar events={events} month={month} onMonth={setMonth} onCreate={date=>open(null,\'events\',date)} onEdit={row=>open(row,\'events\')} disabled={saving}/>}\n<Dialog open={!!form} onOpenChange={v=>{if(!v)guard(()=>{setForm(null);setDirty(false)})}}><DialogContent className="owner-editor" showCloseButton={false}>{form&&<section className="editor-panel">'
+          )
+          replace(
+              "<h3>{edit?'Edit':'New'} {kind==='events'?'event':'update'}</h3>",
+              "<div><DialogTitle>{edit?'Edit':'New'} {kind==='events'?'event':'update'}</DialogTitle><DialogDescription>{kind==='events'?dateLabel(form.date)+' · Eastern Time':'Write a club announcement.'}</DialogDescription></div>"
+          )
+          replace(
+              '<span className="fineprint">{dirty?\'Unsaved changes\':\'\'}</span>',
+              '{edit&&<button type="button" className="delete-button" disabled={saving} onClick={()=>{setSaveError(\'\');setDeleting(edit)}}>Delete {kind===\'events\'?\'event\':\'update\'}</button>}<span className="fineprint">{dirty?\'Unsaved changes\':\'\'}</span>'
+          )
+          replace(
+              '</form></section>}',
+              '</form></section>}</DialogContent></Dialog>'
+          )
+
+          a = s.index('<div className="admin-summary">')
+          b = s.index('{message&&', a)
+          s = s[:a] + s[b:]
+
+          a = s.index(':<div className="admin-entries">')
+          b = s.index('\n<AlertDialog open={!!deleting}', a)
+          s = s[:a] + ':kind===\'posts\'?<div className="admin-entries">{posts.length===0?<div className="empty-state"><h3>Your next announcement starts here.</h3><p>Write an update and save a draft or publish it immediately.</p><button className="button dark" onClick={()=>open()}>Write first update</button></div>:posts.map(row=><article className="admin-row" key={row.id}><div><div className="row-meta">{dateLabel(row.date)} {row.id.startsWith(\'archive-\')&&<span className="tag">Imported news</span>} <span className="tag">{row.status}</span>{!!row.pinned&&<span className="tag">Pinned</span>}</div><h3>{row.title}</h3><p>{row.body.slice(0,130)+(row.body.length>130?\'…\':\'\')}</p></div><div className="row-actions"><button disabled={saving} className="outline-button" onClick={()=>open(row)}>Edit</button><button disabled={saving} className="delete-button" onClick={()=>{setSaveError(\'\');setDeleting(row)}}>Delete</button></div></article>)}</div>:null}' + s[b:]
+
+          s = s.replace("dateLabel,timeLabel,today", "dateLabel,today")
+          p.write_text(s, encoding="utf-8")
+
+          with (root / "app/globals.css").open("a", encoding="utf-8") as f:
+              f.write('/* Owner calendar: the schedule is the workspace. */\n.admin-page{padding-top:32px}.admin-heading{margin-bottom:18px}.admin-heading h1{font-size:clamp(30px,4vw,44px);margin:8px 0}.admin-heading p{margin-bottom:0}.admin-tabs{margin-bottom:12px}.admin-toolbar{margin-bottom:20px}.admin-toolbar h2{font-size:24px;margin-bottom:6px}.owner-calendar .calendar-toolbar{margin-bottom:8px}.owner-calendar-help{font-size:14px;color:var(--body-muted);margin:8px 0 16px}.owner-calendar-scroll{overflow-x:auto;border-radius:6px}.owner-calendar-grid{min-width:630px}.owner-day{display:flex;flex-direction:column;min-height:135px;padding:6px}.owner-add-day{display:flex;width:100%;align-items:center;justify-content:space-between;text-align:left;border-radius:4px;min-height:38px;padding:2px 6px}.owner-add-day:hover,.owner-add-day:focus-visible{background:#e9efdf}.day-plus{font-size:20px;color:#53665c}.owner-day-space{flex:1;min-height:22px;width:100%;border-radius:4px}.owner-day-space:hover{background:#f0f5e7}.owner-calendar .calendar-event:hover{outline:2px solid #749537}.owner-calendar button:focus-visible{outline:2px solid #356047;outline-offset:2px}.owner-editor{width:calc(100% - 24px);max-width:720px!important;max-height:90dvh;overflow-y:auto;padding:0;background:white}.owner-editor .editor-panel{border:0;margin:0;padding:24px}.owner-editor .editor-heading{margin-bottom:20px}.owner-editor [data-slot=dialog-title]{font-size:24px}.owner-editor [data-slot=dialog-description]{margin:8px 0 0}.owner-calendar .fineprint{margin-top:14px}@media(max-width:600px){.admin-page{padding-top:24px}.owner-calendar-grid{min-width:560px}.owner-day{min-height:115px}.owner-editor .editor-panel{padding:18px}.owner-editor .editor-grid{gap:14px}.owner-calendar .calendar-toolbar{flex-direction:row;align-items:center;gap:10px}.owner-calendar .calendar-toolbar h2{font-size:21px}.owner-calendar .outline-button{padding:8px 10px}}\n')
+
+          write(
+              'pnpm-workspace.yaml',
+              'strictDepBuilds: true\nallowBuilds:\n  esbuild: true\n  fsevents: true\n  sharp: true\n  unrs-resolver: true\n  workerd: true\noverrides:\n  miniflare>sharp: 0.35.4\n'
+          )
+
+          write("README.md", """# ECBC independent GitHub website
+
+          Same design, pages, images, and editable owner calendar.
+          GitHub stores the code; Cloudflare Workers and D1 run it.
+          GitHub Pages alone cannot run login or shared storage.
+
+          ## First deployment
+
+          Use Node.js 24 and pnpm 11.25.0. In this repository:
+
+          ```sh
+          pnpm install --frozen-lockfile
+          pnpm exec wrangler login
+          pnpm exec wrangler d1 create ecbc-db
+          ```
+
+          Copy the returned database_id into wrangler.json, replacing the
+          all-zero placeholder. Keep binding DB.
+          Use a unique Worker name if ecbc-club already exists in your account.
+
+          ```sh
+          pnpm db:remote
+          pnpm build
+          pnpm deploy
+          pnpm owner:setup remote
+          ```
+
+          The last command prints a NEW private owner code.
+          Save it; sign in at /admin on your NEW site.
+          It is separate from the old site code.
+          Never commit codes or tokens.
+
+          ## GitHub auto-deploy
+
+          Commit your real database_id.
+          Connect this repository under your Cloudflare Worker's Settings > Builds.
+          Worker name must match wrangler.json.
+
+          Build command:
+          pnpm install --frozen-lockfile && pnpm typecheck && pnpm build
+
+          Deploy command:
+          pnpm db:remote && pnpm deploy
+
+          Node version: 24.
+          The build token needs Workers edit and D1 edit permissions.
+
+          ## Local development
+
+          ```sh
+          pnpm owner:setup local
+          pnpm db:local
+          pnpm dev
+          ```
+
+          Use localhost and the local code.
+          Local and remote databases are separate.
+
+          ## Data
+
+          Source-defined news and 27 October/November 2026 sessions initialize once.
+          Private drafts and later edits in the old site's live database
+          are NOT copied or published.
+          New edits affect only your new D1 database.
+
+          After copying, delete the ECBC_OWNER_CODE GitHub secret.
+          The new site needs no ChatGPT login and has no dependency on the old site.
+          """)
+
+          write('.node-version', '24\n')
+
+          write('wrangler.json', json.dumps({
+              "$schema": "node_modules/wrangler/config-schema.json",
+              "name": "ecbc-club",
+              "main": "worker.ts",
+              "compatibility_date": "2026-05-15",
+              "compatibility_flags": ["nodejs_compat"],
+              "assets": {
+                  "binding": "ASSETS",
+                  "directory": "./public"
+              },
+              "d1_databases": [{
+                  "binding": "DB",
+                  "database_name": "ecbc-db",
+                  "database_id": "00000000-0000-4000-8000-000000000000",
+                  "migrations_dir": "migrations"
+              }]
+          }, indent=2) + "\n")
+
+          write(
+              '.dev.vars.example',
+              '# Run: pnpm owner:setup local\nOWNER_CODE_SHA256=\n'
+          )
+
+          write('vite.config.ts', """import vinext from 'vinext';
+          import {cloudflare} from '@cloudflare/vite-plugin';
+          import {defineConfig} from 'vite';
+
+          export default defineConfig({
+            plugins:[
+              vinext(),
+              cloudflare({
+                viteEnvironment:{
+                  name:'rsc',
+                  childEnvironments:['ssr']
+                },
+                inspectorPort:false
+              })
+            ]
+          });
+          """)
+
+          write(
+              '.gitignore',
+              'node_modules/\ndist/\n.next/\n.wrangler/\n.dev.vars\n.dev.vars.*\n.env\n.env.*\n!.env.example\n*.tsbuildinfo\n*.log\n'
+          )
+
+          write(
+              'worker.ts',
+              "import handler from 'vinext/server/fetch-handler';\nexport default handler;\n"
+          )
+
+          write('scripts/check-config.mjs', """import {readFileSync} from 'node:fs';
+
+          const config=JSON.parse(
+            readFileSync(new URL('../wrangler.json',import.meta.url),'utf8')
+          );
+
+          const id=config.d1_databases?.find(d=>d.binding==='DB')?.database_id;
+
+          if(!id||id==='00000000-0000-4000-8000-000000000000'){
+            console.error(
+              'Create your own Cloudflare D1 database and put its database_id in wrangler.json. See README.md.'
+            );
+            process.exit(1);
+          }
+          """)
+
+          write('scripts/owner-setup.mjs', """import {createHash,randomBytes} from 'node:crypto';
+          import {spawnSync} from 'node:child_process';
+          import {readFileSync,writeFileSync} from 'node:fs';
+          import {fileURLToPath} from 'node:url';
+
+          const mode=process.argv[2];
+
+          if(!['local','remote'].includes(mode)){
+            console.error('Usage: pnpm owner:setup local OR pnpm owner:setup remote');
+            process.exit(1);
+          }
+
+          if(mode==='remote')await import('./check-config.mjs');
+
+          const code=randomBytes(18).toString('base64url');
+          const hash=createHash('sha256').update(code).digest('hex');
+
+          if(mode==='local'){
+            const path=new URL('../.dev.vars',import.meta.url);
+            let prior='';
+
+            try{
+              prior=readFileSync(path,'utf8');
+            }catch(e){
+              if(e.code!=='ENOENT')throw e;
+            }
+
+            const rest=prior.split('\\n')
+              .filter(line=>!/^OWNER_CODE_SHA256\\s*=/.test(line))
+              .join('\\n').trim();
+
+            writeFileSync(
+              path,
+              (rest?rest+'\\n':'')+`OWNER_CODE_SHA256=${hash}\\n`,
+              {mode:0o600}
+            );
+          }else{
+            const result=spawnSync(
+              process.execPath,
+              [
+                fileURLToPath(
+                  new URL('../node_modules/wrangler/bin/wrangler.js',import.meta.url)
+                ),
+                'secret','put','OWNER_CODE_SHA256',
+                '--config','wrangler.json'
+              ],
+              {
+                input:hash+'\\n',
+                stdio:['pipe','inherit','inherit']
+              }
+            );
+
+            if(result.error)throw result.error;
+            if(result.status!==0)process.exit(result.status||1);
+          }
+
+          console.log(
+            `\\nYour NEW ${mode} owner code (save it privately):\\n\\n${code}\\n\\nSign in at /admin. Never commit this code. Running this again changes your code.`
+          );
+          """)
+
+          write('app/admin/owner-calendar.tsx', """'use client';
+
+          import {
+            dateLabel,timeLabel,today,type ClubEvent
+          } from '@/lib/club-types';
+
+          export default function OwnerCalendar({
+            events,month,onMonth,onCreate,onEdit,disabled
+          }:{
+            events:ClubEvent[];
+            month:string;
+            onMonth:(month:string)=>void;
+            onCreate:(date:string)=>void;
+            onEdit:(event:ClubEvent)=>void;
+            disabled:boolean
+          }){
+            const [year,number]=month.split('-').map(Number);
+            const first=new Date(year,number-1,1).getDay();
+            const days=new Date(year,number,0).getDate();
+            const count=Math.ceil((first+days)/7)*7;
+            const current=today();
+
+            const shift=(offset:number)=>{
+              const d=new Date(year,number-1+offset,1);
+              onMonth(
+                `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+              );
+            };
+
+            return <section className="owner-calendar" aria-label="Edit club calendar">
+              <div className="calendar-toolbar">
+                <h2 aria-live="polite">
+                  {new Date(year,number-1,1).toLocaleDateString(
+                    'en-US',{month:'long',year:'numeric'}
+                  )}
+                </h2>
+                <div>
+                  <button className="outline-button"
+                    onClick={()=>shift(-1)} aria-label="Previous month">←</button>
+                  <button className="outline-button"
+                    onClick={()=>onMonth(current.slice(0,7))}>This month</button>
+                  <button className="outline-button"
+                    onClick={()=>shift(1)} aria-label="Next month">→</button>
+                </div>
+              </div>
+
+              <p className="owner-calendar-help">
+                Click a date to add a session. Click an event to edit it.
+                All times are Eastern.
+              </p>
+
+              <div className="owner-calendar-scroll">
+                <div className="calendar-grid owner-calendar-grid">
+                  {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(
+                    d=><div className="weekday" key={d}>{d}</div>
+                  )}
+
+                  {Array.from({length:count},(_,index)=>{
+                    const day=index-first+1;
+
+                    if(day<1||day>days){
+                      return <div className="calendar-cell blank"
+                        key={'blank'+index} aria-hidden="true"/>;
+                    }
+
+                    const date=`${month}-${String(day).padStart(2,'0')}`;
+                    const entries=events.filter(e=>e.date===date)
+                      .sort((a,b)=>a.start.localeCompare(b.start));
+
+                    return <div
+                      className={'calendar-cell owner-day '+(
+                        date===current?'is-today':''
+                      )}
+                      key={date}
+                    >
+                      <button className="owner-add-day"
+                        disabled={disabled}
+                        onClick={()=>onCreate(date)}
+                        aria-label={`Add event on ${dateLabel(date)}`}
+                        aria-current={date===current?'date':undefined}
+                      >
+                        <span className="day-number">{day}</span>
+                        <span className="day-plus" aria-hidden="true">+</span>
+                      </button>
+
+                      {entries.map(event=><button
+                        key={event.id}
+                        disabled={disabled}
+                        className={'calendar-event '+(
+                          event.cancelled?'cancelled':''
+                        )}
+                        onClick={()=>onEdit(event)}
+                        aria-label={`Edit ${event.title}, ${dateLabel(date)}, ${timeLabel(event.start)}${event.cancelled?', cancelled':''}`}
+                      >
+                        <span>
+                          {timeLabel(event.start)} – {timeLabel(event.end)}
+                        </span>
+                        <strong>
+                          {event.cancelled?'Cancelled · ':''}{event.title}
+                        </strong>
+                        <span>{event.location}</span>
+                      </button>)}
+
+                      <button className="owner-day-space"
+                        disabled={disabled}
+                        onClick={()=>onCreate(date)}
+                        tabIndex={-1}
+                        aria-label={`Add event on ${dateLabel(date)}`}
+                      />
+                    </div>;
+                  })}
+                </div>
+              </div>
+
+              <p className="fineprint">
+                New sessions appear on the club calendar after you save.
+              </p>
+            </section>;
+          }
+          """)
+
+          write(
+              'app/admin/code/page.tsx',
+              'import { redirect } from "next/navigation";\nexport default function Page(){redirect("/admin");}\n'
+          )
+
+          package = json.loads((root / "package.json").read_text())
+          package["name"] = "ecbc-github"
+          package["engines"] = {"node": ">=24.0.0"}
+          package["scripts"] = {
+              "dev": "vite dev",
+              "build": "vinext build",
+              "preview": "vite preview",
+              "typecheck": "tsc --noEmit",
+              "db:local": "wrangler d1 migrations apply DB --local",
+              "db:remote": "node scripts/check-config.mjs && wrangler d1 migrations apply DB --remote",
+              "deploy": "node scripts/check-config.mjs && wrangler deploy",
+              "owner:setup": "node scripts/owner-setup.mjs"
+          }
+
+          write("package.json", json.dumps(package, indent=2) + "\n")
+
+          for path, f in source.items():
+              if path.startswith("drizzle/") and path.endswith(".sql"):
+                  write(
+                      "migrations/" + pathlib.PurePosixPath(path).name,
+                      f["content"]
+                  )
+
+          print("ECBC source and editable owner calendar are ready.")
+          print("Follow README.md to deploy your independent website.")
+
+      - name: Verify project
+        run: |
+          npm install --global pnpm@11.25.0
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm build
+
+      - name: Save code to this repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Create independent ECBC website with owner calendar"
+          git push origin HEAD:"$GITHUB_REF_NAME"
