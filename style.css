@@ -372,3 +372,10 @@ tbody tr:hover{background:#e9efdf80}
   html{scroll-behavior:auto}
   *{animation:none!important;transition:none!important}
 }
+
+.google-connection { border: 1px solid #ddd; border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+.google-connection .toolbar-actions { flex-wrap: wrap; }
+.google-selection { display: grid; gap: 16px; max-width: 680px; margin-top: 20px; }
+.google-selection select { display: block; width: 100%; margin-top: 8px; }
+
+[hidden]{display:none!important}dialog{border:0;border-radius:18px;padding:28px;width:min(680px,calc(100% - 32px));max-height:90vh;overflow:auto;color:#1d3027;background:#faf9f5}dialog::backdrop{background:#0008}dialog h2{margin:0 0 18px}dialog input:not([type=checkbox]),dialog textarea,dialog select,.owner-login input{width:100%;padding:12px;border:1px solid #bbb;border-radius:6px;font:inherit}.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.editor-grid label{display:grid;gap:6px}.editor-grid .full-field{grid-column:1/-1}.editor-grid .check-label{display:flex;align-items:center;gap:8px}dialog .editor-actions{margin:20px 0;display:flex;gap:12px;flex-wrap:wrap}.admin-tabs{display:flex;gap:12px;margin:20px 0}.owner-login{max-width:480px}.owner-login form{display:grid;gap:16px}.google-selection label{display:block}.google-selection .check-label{display:flex;gap:10px}.google-selection input[type=checkbox]{flex-shrink:0;width:20px}.status-line{min-height:1.5em}.error-box:empty,.success-box:empty{display:none}.news-article{margin-bottom:24px}.news-article h2{font-size:clamp(24px,3vw,36px)}@media(max-width:600px){.editor-grid{grid-template-columns:1fr}dialog{padding:18px}}
