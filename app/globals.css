@@ -372,3 +372,8 @@ tbody tr:hover{background:#e9efdf80}
   html{scroll-behavior:auto}
   *{animation:none!important;transition:none!important}
 }
+
+.google-connection { border: 1px solid #ddd; border-radius: 16px; padding: 24px; margin-bottom: 24px; }
+.google-connection .toolbar-actions { flex-wrap: wrap; }
+.google-selection { display: grid; gap: 16px; max-width: 680px; margin-top: 20px; }
+.google-selection select { display: block; width: 100%; margin-top: 8px; }

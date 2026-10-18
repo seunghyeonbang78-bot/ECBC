@@ -1,4 +1,7 @@
 export type ClubEvent = {
+  source?: 'google';
+  googleUrl?: string;
+  allDay?: boolean;
   id: string;
   title: string;
   date: string;
@@ -37,6 +40,7 @@ export const dateLabel = (date: string) =>
   });
 
 export const timeLabel = (time: string) => {
+  if (time === '24:00') return 'Midnight';
   const [hour, minute] = time.split(':').map(Number);
 
   return (

@@ -3,7 +3,9 @@
   "name": "ecbc-club",
   "main": "worker.ts",
   "compatibility_date": "2026-05-15",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "assets": {
     "binding": "ASSETS",
     "directory": "./public"
@@ -12,8 +14,16 @@
     {
       "binding": "DB",
       "database_name": "ecbc-db",
-      "database_id": "00000000-0000-4000-8000-000000000000",
+      "database_id": "8e0c2826-d881-41b0-805a-95a2edf8ac0f",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  },
+  "vars": {
+    "GOOGLE_REDIRECT_URI": "https://ecbc-club.ecbc-seunghyeon.workers.dev/api/google/callback"
+  }
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import GoogleCalendar from './google-calendar';
 import OwnerCalendar from './owner-calendar';
 import { useClub } from '../use-club';
 import { dateLabel, today } from '@/lib/club-types';
@@ -67,6 +68,7 @@ function Choice({
 export default function Admin({ name }: { name: string }) {
   const { events, posts, loading, error, load } = useClub(true);
 
+  const [googleEvent, setGoogleEvent] = useState<any>(null);
   const [kind, setKind] = useState('events');
   const [month, setMonth] = useState(() => today().slice(0, 7));
   const [edit, setEdit] = useState<any>(null);
@@ -97,6 +99,7 @@ export default function Admin({ name }: { name: string }) {
     date = today()
   ) {
     guard(() => {
+      if (row?.source === 'google') { setGoogleEvent(row); return; }
       setKind(selectedKind);
       setEdit(row);
 
@@ -190,6 +193,16 @@ export default function Admin({ name }: { name: string }) {
           </button>
         </form>
       </div>
+
+      <GoogleCalendar onSynced={load} />
+
+      <Dialog open={!!googleEvent} onOpenChange={value => !value && setGoogleEvent(null)}>
+        <DialogContent className="club-dialog">
+          <DialogTitle>{googleEvent?.title}</DialogTitle>
+          <DialogDescription>This event is synced from Google Calendar. Make changes there and ECBC will update automatically.</DialogDescription>
+          {googleEvent && <><p>{dateLabel(googleEvent.date)} · {googleEvent.location}</p><p className="preserve-lines">{googleEvent.description}</p><a className="button dark" href={googleEvent.googleUrl} target="_blank" rel="noopener noreferrer">Edit in Google Calendar ↗</a></>}
+        </DialogContent>
+      </Dialog>
 
       {message && (
         <p className="success-box" role="status">{message}</p>

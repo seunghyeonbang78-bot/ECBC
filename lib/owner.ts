@@ -30,5 +30,5 @@ export async function ownerUser() {
     .bind(await digest(token), Date.now())
     .first();
 
-  return row ? { displayName: 'Owner' } : null;
+  return row ? { displayName: 'Owner', sessionHash: await digest(token) } : null;
 }

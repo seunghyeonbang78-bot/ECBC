@@ -129,7 +129,7 @@ export default function Calendar() {
                       }
                       onClick={() => setSelected(event)}
                     >
-                      <span>{timeLabel(event.start)}</span>
+                      <span>{event.allDay ? 'All day' : timeLabel(event.start)}</span>
                       <strong>
                         {event.cancelled ? 'Cancelled · ' : ''}
                         {event.title}
@@ -161,7 +161,7 @@ export default function Calendar() {
                 <span>
                   {dateLabel(event.date)}
                   <small>
-                    {timeLabel(event.start)} – {timeLabel(event.end)}
+                    {event.allDay ? 'All day' : timeLabel(event.start) + ' – ' + timeLabel(event.end)}
                   </small>
                 </span>
 
@@ -197,7 +197,7 @@ export default function Calendar() {
               </span>
 
               <p>
-                {timeLabel(selected.start)} – {timeLabel(selected.end)}
+                {selected.allDay ? 'All day' : timeLabel(selected.start) + ' – ' + timeLabel(selected.end)}
                 <br />
                 <strong>{selected.location}</strong>
               </p>

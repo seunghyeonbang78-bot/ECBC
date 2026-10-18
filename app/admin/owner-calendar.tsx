@@ -143,7 +143,7 @@ export default function OwnerCalendar({
                     }
                   >
                     <span>
-                      {timeLabel(event.start)} – {timeLabel(event.end)}
+                      {event.allDay ? 'All day' : timeLabel(event.start) + ' – ' + timeLabel(event.end)}
                     </span>
 
                     <strong>
