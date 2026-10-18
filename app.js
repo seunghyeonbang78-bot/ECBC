@@ -1,5 +1,5 @@
 /* Change ONLY this address to your new Cloudflare Worker URL. No passwords belong in this file. */
-const API_URL = 'https://YOUR-NEW-WORKER.workers.dev';
+const API_URL = 'https://ecbc.ecbc-seunghyeon.workers.dev';
 
 const $ = selector => document.querySelector(selector);
 const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
