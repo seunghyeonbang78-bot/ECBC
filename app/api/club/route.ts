@@ -1,3 +1,4 @@
+import { publicGoogleEvents } from '@/lib/google-calendar';
 import { ensureUserCalendar } from '@/lib/import-calendar';
 import { ensureOriginalNews } from '@/lib/import-news';
 import { clubDb } from '@/lib/club-db';
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
     ]);
 
     return reply({
-      events: events.results,
+      events: [...events.results, ...await publicGoogleEvents(admin)].sort((a: any, b: any) => (a.date + a.start).localeCompare(b.date + b.start)),
       posts: posts.results
     });
   } catch (error) {
@@ -99,6 +100,10 @@ export async function POST(request: Request) {
       (typeof id !== 'string' || !Number.isInteger(version))
     ) {
       return reply({ error: 'Missing record version.' }, 400);
+    }
+
+    if (kind === 'events' && typeof id === 'string' && id.startsWith('google:')) {
+      return reply({ error: 'Edit this event in Google Calendar.' }, 400);
     }
 
     const db = clubDb();

@@ -15,9 +15,8 @@ export function useClub(admin = false) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
-    setError('');
-    setLoading(true);
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) { setError(''); setLoading(true); }
 
     try {
       const response = await fetch(
@@ -32,9 +31,10 @@ export function useClub(admin = false) {
       }
 
       setData(result);
+      setError('');
       return true;
     } catch (error) {
-      setError(
+      if (!quiet) setError(
         error instanceof Error
           ? error.message
           : 'Unable to load.'
@@ -48,7 +48,11 @@ export function useClub(admin = false) {
 
   useEffect(() => {
     load();
+    const refresh = () => { if (!document.hidden) void load(true); };
+    const timer = setInterval(refresh, 30000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
   }, [load]);
 
-  return { ...data, loading, error, load };
+  return { ...data, loading, error, load: () => load() };
 }
